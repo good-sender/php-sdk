@@ -1,0 +1,7 @@
+{
+  "$schema": "https://unpkg.com/@openapitools/openapi-generator-cli@2.21.5/config.schema.json",
+  "spaces": 2,
+  "generator-cli": {
+    "version": "7.21.0"
+  }
+}

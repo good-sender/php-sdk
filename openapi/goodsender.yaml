@@ -1,0 +1,985 @@
+openapi: 3.1.0
+info:
+  title: Goodsender API
+  description: |
+    Goodsender API.
+    ### Authorization
+
+    All API requests require an API key in the `Authorization` header:
+
+    ```
+    Authorization: Bearer <your-api-key>
+    ```
+  version: 1.0.0
+  contact:
+    name: Goodsender Support
+    email: support@goodsender.com
+servers:
+  - url: https://api.goodsender.com
+    description: Production server
+  - url: '{CUSTOM_SERVER_URL}'
+    description: Custom server URL
+    variables:
+      CUSTOM_SERVER_URL:
+        default: https://api.dev.goodsender.com
+security:
+  - bearerAuth: []
+tags:
+  - name: Emails
+    description: |
+      API to send and manage emails.
+  - name: Domains
+    description: |
+      API to manage sender domains.
+paths:
+  /v1/emails/send:
+    post:
+      tags:
+        - Emails
+      summary: Send an email or a batch of emails
+      description: |
+        Send one or more emails. Emails can be sent only to recipients who have opted in to receive communications from your domain.
+        The response indicates how many emails were sent versus not sent, based on each recipient's consent state.
+      operationId: SendEmail
+      security:
+        - bearerAuth: []
+      requestBody:
+        description: List of emails to send
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendEmailRequest'
+            examples:
+              simple_email:
+                summary: Simple Email
+                value:
+                  emails:
+                    - from:
+                        email: sender@example.com
+                        name: Sender Name
+                      to:
+                        - email: recipient@example.com
+                          name: Recipient Name
+                      subject: Test Email
+                      text_content: This is a test email
+              html_email:
+                summary: HTML Email with Attachment
+                value:
+                  emails:
+                    - from:
+                        email: sender@example.com
+                      to:
+                        - email: recipient@example.com
+                      subject: HTML Email with Attachment
+                      html_content: <h1>Hello</h1><p>This is an HTML email</p>
+                      attachments:
+                        - file_name: document.pdf
+                          content: JVBERi0xLjQKJcOkw7zDtsO...
+                          content_type: application/pdf
+                      tracking:
+                        opens: true
+                        clicks: true
+                        unsubscribes: false
+              markdown_email:
+                summary: Markdown Email
+                value:
+                  emails:
+                    - from:
+                        email: sender@example.com
+                        name: Sender Name
+                      to:
+                        - email: recipient@example.com
+                          name: Recipient Name
+                      subject: Markdown Email
+                      markdown_content: |-
+                        # Hello
+
+                        This is **bold** and this is *italic*.
+
+                        - Item 1
+                        - Item 2
+              batch_emails:
+                summary: Batch of Emails
+                value:
+                  emails:
+                    - from:
+                        email: sender@example.com
+                      to:
+                        - email: user1@example.com
+                        - email: user2@example.com
+                      subject: Batch Email 1
+                      text_content: First email content
+                    - from:
+                        email: sender@example.com
+                      to:
+                        - email: user3@example.com
+                      subject: Batch Email 2
+                      html_content: <p>Second email content</p>
+      responses:
+        '200':
+          description: Email(s) accepted for sending
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SendEmailResponse'
+              example:
+                sent: 8
+                declined: 2
+        '400':
+          description: Bad request - validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SendEmailErrorResponse'
+              examples:
+                missing_sender:
+                  summary: Missing Sender
+                  value:
+                    error: Missing sender email
+                invalid_email:
+                  summary: Invalid Email
+                  value:
+                    error: 'Invalid sender email: invalid-email'
+                too_many_recipients:
+                  summary: Too Many Recipients
+                  value:
+                    error: 'Too many recipients: 1500'
+                domain_not_allowed:
+                  summary: Domain Not Allowed
+                  value:
+                    error: 'you are not allowed to send from this domain: example.com'
+        '401':
+          description: Unauthorized - invalid or missing API key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SendEmailErrorResponse'
+              example:
+                error: Unauthorized
+        '413':
+          description: Payload too large
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SendEmailErrorResponse'
+              example:
+                error: Request payload too large
+        '429':
+          description: Quota exceeded.
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+              description: Seconds until the quota resets.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuotaExceededError'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SendEmailErrorResponse'
+              example:
+                error: Internal server error
+        '502':
+          description: Bad gateway - upstream email service unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SendEmailErrorResponse'
+              example:
+                error: Upstream email service unavailable
+  /v1/emails/template:
+    post:
+      tags:
+        - Emails
+      summary: Send a transactional email using a template
+      description: |
+        Send a transactional email using a predefined template for common use cases like OTP codes, order confirmations, and new device login alerts.
+        If the recipient has "denied" consent, the response returns `{"status": "declined"}` and the email is not sent. Unknown recipients are auto-registered with "pending" consent. The template endpoint does not change the recipient's consent.
+        Each email includes an approve/reject footer allowing the recipient to manage future communications.
+        Provide the template ID and any variables to fill in the placeholders. All variables are optional and will be replaced with an empty string if omitted.
+        URL-type variables must point to the same domain as the sender's email address.
+      operationId: SendTemplateEmail
+      security:
+        - bearerAuth: []
+      requestBody:
+        description: Template email to send
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TemplateEmailRequest'
+            examples:
+              template_email:
+                summary: Template Email
+                value:
+                  from:
+                    email: sender@example.com
+                    name: Sender Name
+                  to:
+                    email: recipient@example.com
+                    name: Recipient Name
+                  subject: Test Email
+                  template:
+                    template_id: otp_code
+                    variables:
+                      app_name: MyApp
+                      otp_code: '482916'
+      responses:
+        '200':
+          description: Whether the templated email was sent
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemplateEmailResponse'
+              example:
+                status: sent
+        '400':
+          description: Bad request - invalid variables or request body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SendEmailErrorResponse'
+              examples:
+                invalid_variables:
+                  summary: Invalid Variables
+                  value:
+                    error: 'Unknown template variable: invalid_var'
+        '401':
+          description: Unauthorized - invalid or missing API key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SendEmailErrorResponse'
+              example:
+                error: Unauthorized
+        '404':
+          description: Template not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SendEmailErrorResponse'
+              example:
+                error: 'Template not found: unknown_template'
+        '413':
+          description: Payload too large
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SendEmailErrorResponse'
+              example:
+                error: Request payload too large
+        '429':
+          description: Quota exceeded.
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+              description: Seconds until the quota resets.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuotaExceededError'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SendEmailErrorResponse'
+              example:
+                error: Internal server error
+        '502':
+          description: Bad gateway - upstream email service unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SendEmailErrorResponse'
+              example:
+                error: Upstream email service unavailable
+  /v1/emails/consent:
+    post:
+      tags:
+        - Emails
+      summary: Request recipients' consent to receive emails from your domain
+      description: |
+        Send a consent message to each address so recipients can approve or reject future emails from your domain.
+        Include the email addresses in the request body to start the consent flow.
+      operationId: RequestEmailConsent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConsentEmailRequest'
+      responses:
+        '200':
+          description: Recipient consent status for each address (found or created)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsentEmailResult'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: |
+            Too many consents are awaiting processing for this workspace. The
+            internal release queue will drain pending entries automatically;
+            retry later.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: |
+            Internal server error. The upfront quota reservation (if any) is
+            refunded and the request is safe to retry — `getOrCreateEmailsInDb`
+            is idempotent.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '502':
+          description: Bad gateway - upstream email service unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: Upstream email service unavailable
+  /v1/emails/{email}:
+    get:
+      tags:
+        - Emails
+      summary: Get recipient consent status
+      description: Retrieve the current consent status for an email address. Optionally filter by sender domain.
+      operationId: GetEmailConsentStatus
+      parameters:
+        - name: email
+          in: path
+          required: true
+          description: Email address to look up.
+          schema:
+            type: string
+            format: email
+            example: user@example.com
+        - name: domain
+          in: query
+          required: false
+          description: Optional sender domain to filter consent records by. When omitted, returns consent across all domains.
+          schema:
+            type: string
+            example: example.com
+      responses:
+        '200':
+          description: Recipient consent status across all domains
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/EmailAccount'
+        '400':
+          description: Invalid email address
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Email address was not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /v1/emails:
+    get:
+      tags:
+        - Emails
+      summary: List email consent statuses
+      description: Retrieve a paginated list of email consent statuses for a domain.
+      operationId: ListEmailConsents
+      parameters:
+        - name: domain
+          in: query
+          required: true
+          description: Sender domain to filter consent records by.
+          schema:
+            type: string
+            example: example.com
+        - name: limit
+          in: query
+          required: false
+          description: Maximum number of records to return.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+        - name: cursor
+          in: query
+          required: false
+          description: Cursor for pagination.
+          schema:
+            type: string
+        - name: consentStatus
+          in: query
+          required: false
+          description: Status of the recipient's consent for receiving emails. 'pending' = awaiting consent email send, 'requested' = consent email dispatched, 'failed' = consent email delivery failed, 'granted' = recipient consented to receive emails, 'denied' = recipient declined to receive emails.
+          schema:
+            type: string
+            enum:
+              - pending
+              - requested
+              - failed
+              - granted
+              - denied
+        - name: engagementStatus
+          in: query
+          required: false
+          description: Status of the recipient's engagement with the emails.
+          schema:
+            type: string
+            enum:
+              - new
+              - hot
+              - warm
+              - cooling
+              - dormant
+              - inactive
+      responses:
+        '200':
+          description: A paginated list of email consent statuses
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmailListResponse'
+        '400':
+          description: Invalid request parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /v1/domains:
+    get:
+      tags:
+        - Domains
+      summary: List domains
+      description: |
+        Retrieve a paginated list of sender domains for the workspace the
+        API key belongs to. Each entry includes the domain's verification
+        state so callers can detect when DNS records still need attention.
+      operationId: ListDomains
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          description: Maximum number of records to return.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+        - name: cursor
+          in: query
+          required: false
+          description: Cursor for pagination, returned as `nextCursor` from a previous response.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: A paginated list of domains for the workspace.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DomainListResponse'
+        '400':
+          description: Invalid request parameters.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized - invalid or missing API key.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: invalid_api_key
+                message: Authorization token is invalid.
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: ApiKey
+      description: API key in Bearer token format
+  schemas:
+    Address:
+      type: object
+      properties:
+        email:
+          type: string
+          default: ''
+          format: email
+          description: Valid email address is required.
+        name:
+          type: string
+          default: ''
+          description: Optional display name
+      required:
+        - email
+    Attachment:
+      type: object
+      properties:
+        file_name:
+          type: string
+          default: ''
+          description: File name for the attachment
+        content:
+          type: string
+          description: Base64 encoded content
+          format: byte
+        content_type:
+          type: string
+          default: ''
+          description: MIME content type (required)
+        inline_id:
+          type: string
+          default: ''
+          description: Inline attachment ID
+      required:
+        - content_type
+      description: Either inline_id or file_name is required. Content must be base64 encoded.
+    TrackingSettings:
+      type: object
+      properties:
+        opens:
+          type: boolean
+          description: Whether to track email opens
+        clicks:
+          type: boolean
+          description: Whether to track link clicks
+        unsubscribes:
+          type: boolean
+          description: Whether to track unsubscribes
+        unsubscribe_group_id:
+          type:
+            - integer
+            - 'null'
+          format: int64
+          description: Optional unsubscribe group ID. If not specified, uses global unsubscribe list. This setting is ignored if unsubscribes is false.
+      description: Controls email tracking and unsubscribe settings
+    SendEmail:
+      type: object
+      properties:
+        from:
+          $ref: '#/components/schemas/Address'
+          description: Sender address (required)
+        to:
+          type: array
+          items:
+            $ref: '#/components/schemas/Address'
+          description: To recipients. At least one recipient (to, cc, or bcc) is required. Maximum 1000 recipients per email.
+        subject:
+          type: string
+          default: ''
+          description: The subject of the email (required)
+        text_content:
+          type: string
+          description: Plain text content
+        html_content:
+          type: string
+          description: HTML content
+        markdown_content:
+          type: string
+          minLength: 1
+          description: |
+            Markdown content. When provided, text_content and html_content are ignored. The raw markdown is used as text_content and rendered to HTML for html_content.
+        template_id:
+          type: string
+          description: Template ID for templated emails
+        template_data:
+          type: object
+          additionalProperties: true
+          description: Data to populate template variables
+        attachments:
+          type: array
+          items:
+            $ref: '#/components/schemas/Attachment'
+          description: Email attachments
+        headers:
+          type: object
+          additionalProperties:
+            type: string
+          description: Custom email headers
+        reply_to:
+          $ref: '#/components/schemas/Address'
+          description: Reply-to address
+        send_time:
+          type: integer
+          format: int64
+          description: Unix timestamp for when to send the email. Must not be more than 72 hours in the future. If 0, sends immediately.
+        webhook_data:
+          type: object
+          additionalProperties:
+            type: string
+          description: Custom data to include in webhook events. Maximum 10 keys, key length 50 chars, value length 100 chars.
+        tag:
+          type: string
+          description: Custom tag for tracking. Maximum 100 characters.
+        tracking:
+          $ref: '#/components/schemas/TrackingSettings'
+          description: Email tracking settings
+      required:
+        - from
+        - to
+        - subject
+      description: |
+        Must provide valid sender and subject. At least one recipient (from 'to', 'cc', or 'bcc') is required. Either 'text_content', 'html_content', 'markdown_content', or 'template_id' is required. When 'markdown_content' is provided, 'text_content' and 'html_content' are ignored.
+    SendEmailRequest:
+      type: object
+      properties:
+        emails:
+          type: array
+          items:
+            $ref: '#/components/schemas/SendEmail'
+          description: List of emails to send. Cannot be empty.
+      required:
+        - emails
+    SendEmailResponse:
+      type: object
+      properties:
+        sent:
+          type: integer
+          example: 8
+          description: Number of emails sent (recipients had consent allowing delivery)
+        declined:
+          type: integer
+          example: 2
+          description: Number of emails not sent because recipients did not have granted consent to receive emails
+      required:
+        - sent
+        - declined
+    SendEmailErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Error message
+          examples:
+            - Missing sender email
+            - Unauthorized
+            - Request payload too large
+            - Request timed out
+      required:
+        - error
+    QuotaExceededError:
+      type: object
+      required:
+        - code
+        - kind
+        - message
+        - limit
+        - used
+        - resetAt
+      properties:
+        code:
+          type: string
+          description: Machine-readable error code.
+          enum:
+            - quota_exceeded
+        kind:
+          type: string
+          description: Whether the daily or monthly quota was exhausted.
+          enum:
+            - daily
+            - monthly
+        message:
+          type: string
+          description: Human-readable error message.
+        limit:
+          type: integer
+          description: Quota limit that was reached.
+        used:
+          type: integer
+          description: Number of emails already used against the quota.
+        resetAt:
+          type: string
+          format: date-time
+          description: Timestamp at which the quota window resets.
+    TemplateEmailRequest:
+      type: object
+      properties:
+        from:
+          $ref: '#/components/schemas/Address'
+          description: Sender address (required)
+        to:
+          $ref: '#/components/schemas/Address'
+          description: Recipient address (required)
+        subject:
+          type: string
+          minLength: 1
+          description: The subject of the email (required)
+        template:
+          type: object
+          properties:
+            template_id:
+              type: string
+              description: The ID of the template to use
+            variables:
+              type: object
+              additionalProperties:
+                type: string
+              description: Key-value pairs to populate template variables
+          required:
+            - template_id
+      required:
+        - from
+        - to
+        - subject
+        - template
+    TemplateEmailResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum:
+            - sent
+            - declined
+          example: sent
+          description: '"sent" if the email was sent, "declined" if the recipient has opted out'
+      required:
+        - status
+    ConsentEmailRecipient:
+      type: object
+      required:
+        - email
+      description: Recipient envelope with optional display name. Pass this shape instead of a bare email string when you want the name to appear in the To header on the consent email and in subsequent listings.
+      properties:
+        email:
+          type: string
+          format: email
+          description: Recipient email address. Leading and trailing whitespace are stripped server-side.
+          example: user@example.com
+        name:
+          type:
+            - string
+            - 'null'
+          description: |
+            Optional display name. Pass a non-empty string to set or replace
+            the stored name. Passing `null`, an empty string, or omitting the
+            field on a re-submitted recipient leaves any previously-stored
+            name unchanged — clearing must be done via the dashboard /
+            authenticated edit flow.
+          example: Jane Doe
+    ConsentEmailEntry:
+      title: ConsentEmailEntry
+      description: |
+        Single entry in the `emails` array of a consent request. Either a
+        bare email string (back-compat) or a `{ email, name? }` object so
+        callers can attach a display name to a specific recipient.
+      oneOf:
+        - type: string
+          format: email
+          title: Bare email address
+          description: |
+            Bare recipient email address. Equivalent to passing the object
+            form with only the `email` field set. Leading and trailing
+            whitespace are stripped server-side.
+        - $ref: '#/components/schemas/ConsentEmailRecipient'
+    ConsentEmailRequest:
+      type: object
+      required:
+        - domain
+        - emails
+      properties:
+        domain:
+          type: string
+          description: Domain for the email addresses.
+          example: example.com
+        redirect_url:
+          type: string
+          description: URL to which the user will be redirected after providing consent. {email} in the URL will be replaced with the recipient's email address.
+          example: https://example.com/consent/{email}
+        emails:
+          type: array
+          minItems: 1
+          maxItems: 1000
+          description: |
+            Recipients to request consent from. Each entry may be either a
+            plain email string or a `{ email, name? }` object so callers can
+            attach a display name to a specific recipient. Mixing the two
+            forms in one request is allowed.
+          items:
+            $ref: '#/components/schemas/ConsentEmailEntry'
+          example:
+            - user1@example.com
+            - email: user2@example.com
+              name: Jane Doe
+    EmailAccount:
+      type: object
+      required:
+        - email
+        - domain
+        - consentStatus
+      properties:
+        email:
+          type: string
+          format: email
+          description: Recipient email address.
+          example: user@example.com
+        name:
+          type:
+            - string
+            - 'null'
+          description: Optional display name for the recipient. Used in the To header on the consent email when present, and surfaced through the Dashboard. May be null when no name has been provided.
+          example: Jane Doe
+        domain:
+          type: string
+          description: Domain part of the email address.
+          example: example.com
+        consentStatus:
+          type: string
+          description: Status of the recipient's consent for receiving emails. 'pending' = awaiting consent email send, 'requested' = consent email dispatched, 'failed' = consent email delivery failed, 'granted' = recipient consented to receive emails, 'denied' = recipient declined to receive emails.
+          enum:
+            - pending
+            - requested
+            - failed
+            - granted
+            - denied
+          example: pending
+        engagementStatus:
+          type: string
+          description: Status of the recipient's engagement with the emails.
+          enum:
+            - new
+            - hot
+            - warm
+            - cooling
+            - dormant
+            - inactive
+          example: new
+    ConsentEmailResult:
+      type: object
+      required:
+        - emails
+      properties:
+        emails:
+          type: array
+          items:
+            $ref: '#/components/schemas/EmailAccount'
+    ErrorResponse:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+          description: Machine-readable error code.
+          example: consent_failed
+        message:
+          type: string
+          description: Human-readable error message.
+          example: Unable to process the request.
+    EmailListResponse:
+      type: object
+      required:
+        - emails
+      properties:
+        emails:
+          type: array
+          items:
+            $ref: '#/components/schemas/EmailAccount'
+        nextCursor:
+          type: string
+          description: Cursor to retrieve the next page of results. Omitted if there are no more results.
+          example: eyJjcmVhdGVkQXRNaWNyb3MiOjE2ODAxMjM0NTY3ODksImVtYWlsIjoidXNlckBleGFtcGxlLmNvbSJ9
+    DomainVerification:
+      type: object
+      required:
+        - verified
+        - tracking_verified
+        - return_path_verified
+        - dkim1_verified
+        - dkim2_verified
+      description: |
+        Per-record verification state for the domain. `verified` is the
+        overall flag; the individual `*_verified` fields indicate which
+        DNS records still need attention when `verified` is `false`.
+      properties:
+        verified:
+          type: boolean
+          description: Overall verification status. True only when every required DNS record is in place.
+          example: true
+        tracking_verified:
+          type: boolean
+          description: Whether the tracking subdomain CNAME is in place.
+          example: true
+        return_path_verified:
+          type: boolean
+          description: Whether the return-path subdomain CNAME is in place.
+          example: true
+        dkim1_verified:
+          type: boolean
+          description: Whether the first DKIM record is in place.
+          example: true
+        dkim2_verified:
+          type: boolean
+          description: Whether the second DKIM record is in place.
+          example: true
+    Domain:
+      type: object
+      required:
+        - domain
+        - tracking
+        - return_path
+        - require_tls
+        - verification
+      properties:
+        domain:
+          type: string
+          description: The domain name.
+          example: example.com
+        tracking:
+          type: string
+          description: Subdomain used for click tracking.
+          example: track.example.com
+        return_path:
+          type: string
+          description: Subdomain used for the return path.
+          example: bounces.example.com
+        require_tls:
+          type: boolean
+          description: Whether outbound mail from this domain must be sent over TLS.
+          example: true
+        verification:
+          $ref: '#/components/schemas/DomainVerification'
+    DomainListResponse:
+      type: object
+      required:
+        - domains
+      properties:
+        domains:
+          type: array
+          items:
+            $ref: '#/components/schemas/Domain'
+        nextCursor:
+          type: string
+          description: Cursor to retrieve the next page of results. Omitted if there are no more results.
+          example: eyJsYXN0RG9tYWluIjoiZXhhbXBsZS5jb20ifQ
+x-tagGroups:
+  - name: Global
+    tags:
+      - Emails
+      - Domains

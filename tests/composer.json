@@ -1,0 +1,18 @@
+{
+  "name": "goodsender/runner-php",
+  "description": "Mock-mode smoke test runner for the PHP SDK.",
+  "type": "project",
+  "require": {
+    "php": ">=8.1",
+    "good-sender/php-sdk": "@dev"
+  },
+  "repositories": [
+    {
+      "type": "path",
+      "url": "..",
+      "options": { "symlink": true }
+    }
+  ],
+  "minimum-stability": "dev",
+  "prefer-stable": true
+}

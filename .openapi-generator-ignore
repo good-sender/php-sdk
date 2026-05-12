@@ -1,0 +1,7 @@
+LICENSE
+CHANGELOG.md
+README.md
+tests/**
+scripts/**
+openapi/**
+openapitools.json

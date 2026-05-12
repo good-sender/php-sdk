@@ -1,0 +1,20 @@
+generatorName: php
+outputDir: .
+inputSpec: ../openapi/goodsender.yaml
+gitUserId: good-sender
+gitRepoId: php-sdk
+packageVersion: 0.1.0
+additionalProperties:
+  httpUserAgent: goodsender-php/0.1.0
+  composerVendorName: goodsender
+  composerProjectName: goodsender
+  packageVersion: 0.1.0
+  packageName: GoodSender
+  artifactVersion: 0.1.0
+  invokerPackage: GoodSender
+  srcBasePath: lib
+  licenseName: MIT
+  artistName: GoodSender
+  artistEmail: support@goodsender.com
+  gitHost: github.com
+  hideGenerationTimestamp: true
