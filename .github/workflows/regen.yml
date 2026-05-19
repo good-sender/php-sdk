@@ -29,6 +29,11 @@ on:
         type: string
   repository_dispatch:
     types: [regen-sdk]
+  # Test trigger: pushes to any `ci/**` branch run this workflow on the branch's code,
+  # so regen + tests + PR creation can be smoke-tested before merging to main.
+  push:
+    branches:
+      - 'ci/**'
 
 permissions:
   contents: write
