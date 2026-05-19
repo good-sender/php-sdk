@@ -1,0 +1,146 @@
+name: Regenerate SDK
+
+# Canonical SDK-regen workflow. Copy this file into each SDK repo at
+# `.github/workflows/regen.yml`; the only per-SDK customization needed is
+# inserting a language toolchain step (e.g. setup-python / setup-go / etc.)
+# below the "Toolchain (language SDK)" marker.
+#
+# Triggers:
+#   workflow_dispatch    — manual run with optional inputs
+#   repository_dispatch  — fired from goodsender-web after spec changes
+#                          (event type: regen-sdk;
+#                           client_payload: spec_url, spec_tag, clean, generator_version)
+
+on:
+  workflow_dispatch:
+    inputs:
+      spec_url:
+        description: "URL to download bundled openapi spec from. If empty, regenerate from openapi/goodsender.yaml in repo."
+        required: false
+        type: string
+      clean:
+        description: "Pass --clean to scripts/regen.sh (full wipe before regen)."
+        required: false
+        type: boolean
+        default: false
+      generator_version:
+        description: "Override openapi-generator JAR version (default 7.21.0 from scripts/regen.sh)."
+        required: false
+        type: string
+  repository_dispatch:
+    types: [regen-sdk]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  regen:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # --- Toolchain (regen driver): Node runs the openapi-generator-cli wrapper
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      # --- Toolchain (regen driver): Java runs the openapi-generator JAR
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      # --- Toolchain (language SDK): inserted per repo (Python / Go / Ruby / etc.)
+      # See per-SDK task in docs/superpowers/plans/2026-05-19-sdk-regen-automation.md
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.3"
+          tools: composer:v2
+          coverage: none
+
+      - name: Cache openapi-generator JAR + npm
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.openapi-generator
+            ~/.npm
+          key: openapi-gen-${{ runner.os }}-${{ hashFiles('openapitools.json') }}
+
+      - name: Resolve inputs
+        id: in
+        env:
+          DISPATCH_SPEC_URL: ${{ github.event.inputs.spec_url }}
+          DISPATCH_CLEAN: ${{ github.event.inputs.clean }}
+          DISPATCH_GEN_VER: ${{ github.event.inputs.generator_version }}
+          PAYLOAD_SPEC_URL: ${{ github.event.client_payload.spec_url }}
+          PAYLOAD_SPEC_TAG: ${{ github.event.client_payload.spec_tag }}
+          PAYLOAD_CLEAN: ${{ github.event.client_payload.clean }}
+          PAYLOAD_GEN_VER: ${{ github.event.client_payload.generator_version }}
+        run: |
+          set -euo pipefail
+          spec_url="${DISPATCH_SPEC_URL:-${PAYLOAD_SPEC_URL:-}}"
+          spec_tag="${PAYLOAD_SPEC_TAG:-}"
+          clean="${DISPATCH_CLEAN:-${PAYLOAD_CLEAN:-false}}"
+          gen_ver="${DISPATCH_GEN_VER:-${PAYLOAD_GEN_VER:-}}"
+          [[ "$clean" != "true" ]] && clean="false"
+          {
+            echo "spec_url<<EOF"; printf '%s\n' "$spec_url"; echo "EOF"
+            echo "spec_tag=$spec_tag"
+            echo "clean=$clean"
+            echo "gen_ver<<EOF"; printf '%s\n' "$gen_ver"; echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Update spec from URL
+        if: steps.in.outputs.spec_url != ''
+        env:
+          SPEC_URL: ${{ steps.in.outputs.spec_url }}
+        run: |
+          set -euo pipefail
+          curl --fail --location --show-error --silent "$SPEC_URL" -o openapi/goodsender.yaml
+
+      - name: Regenerate
+        env:
+          OPENAPI_GENERATOR_VERSION: ${{ steps.in.outputs.gen_ver }}
+          CLEAN: ${{ steps.in.outputs.clean }}
+        run: |
+          set -euo pipefail
+          if [[ "$CLEAN" == "true" ]]; then
+            bash scripts/regen.sh --clean
+          else
+            bash scripts/regen.sh
+          fi
+
+      - name: Run conformance tests (mock)
+        id: tests
+        continue-on-error: true
+        run: bash tests/run.sh mock
+
+      - name: Detect changes
+        id: diff
+        run: |
+          if [[ -z "$(git status --porcelain)" ]]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            git --no-pager diff --stat | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Open PR
+        if: steps.diff.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          commit-message: "chore: regenerate SDK from openapi spec ${{ steps.in.outputs.spec_tag || 'in-repo' }}"
+          title: "chore: regenerate SDK from openapi spec ${{ steps.in.outputs.spec_tag || 'in-repo' }}"
+          body: |
+            Automated regeneration via `.github/workflows/regen.yml`.
+
+            - Trigger: `${{ github.event_name }}`
+            - Spec tag: `${{ steps.in.outputs.spec_tag || '(none — in-repo spec used)' }}`
+            - Spec URL: `${{ steps.in.outputs.spec_url || '(none)' }}`
+            - Clean: `${{ steps.in.outputs.clean }}`
+            - Generator version: `${{ steps.in.outputs.gen_ver || '(default from scripts/regen.sh)' }}`
+            - Conformance tests (`tests/run.sh mock`): **${{ steps.tests.outcome }}**
+          branch: auto/regen-${{ github.run_id }}
+          delete-branch: true
+          labels: automated, regen
