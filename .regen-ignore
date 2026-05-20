@@ -1,0 +1,21 @@
+# Files preserved across regenerations.
+# scripts/regen.sh consumes this file in two ways:
+#   1. Filtered (comments + blank lines stripped) and written to
+#      .openapi-generator-ignore, which openapi-generator reads to know
+#      which paths it must NOT overwrite.
+#   2. The first path component of every pattern is added to --clean's
+#      preserve list, so `regen.sh --clean` will not wipe these top-level
+#      directories or files.
+#
+# Patterns are gitignore-style. Lines starting with `#` and blank lines are
+# treated as comments.
+
+LICENSE
+CHANGELOG.md
+README.md
+tests/**
+scripts/**
+openapi/**
+openapitools.json
+.github/**
+.regen-ignore
