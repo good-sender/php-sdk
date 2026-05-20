@@ -131,10 +131,19 @@ jobs:
             git --no-pager diff --stat | tee -a "$GITHUB_STEP_SUMMARY"
           fi
 
+      - name: Mint PR-creation token from GitHub App
+        if: steps.diff.outputs.changed == 'true'
+        id: pr_token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.SDK_DISPATCH_APP_ID }}
+          private-key: ${{ secrets.SDK_DISPATCH_APP_PRIVATE_KEY }}
+
       - name: Open PR
         if: steps.diff.outputs.changed == 'true'
         uses: peter-evans/create-pull-request@v6
         with:
+          token: ${{ steps.pr_token.outputs.token }}
           commit-message: "chore: regenerate SDK from openapi spec ${{ steps.in.outputs.spec_tag || 'in-repo' }}"
           title: "chore: regenerate SDK from openapi spec ${{ steps.in.outputs.spec_tag || 'in-repo' }}"
           body: |
