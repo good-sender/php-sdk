@@ -155,7 +155,7 @@ jobs:
             - Clean: `${{ steps.in.outputs.clean }}`
             - Generator version: `${{ steps.in.outputs.gen_ver || '(default from scripts/regen.sh)' }}`
             - Conformance tests (`tests/run.sh mock`): **${{ steps.tests.outcome }}**
-          branch: auto/regen-${{ github.run_id }}
+          branch: auto/regen
           delete-branch: true
           labels: automated, regen
 
