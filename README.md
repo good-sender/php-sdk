@@ -2,12 +2,6 @@
 
 Official client library for the GoodSender email API. Package: `good-sender/php-sdk`
 
-## Installation
-
-```bash
-composer require good-sender/php-sdk
-```
-
 ## Quick start
 
 ```php
@@ -82,7 +76,7 @@ echo 'emails=' . count($res->getEmails() ?? []) . "\n";
 
 ## Documentation
 
-- API reference: <https://api.goodsender.com/docs>
+- API reference: <https://goodsender.com/docs>
 - OpenAPI spec: `openapi/goodsender.yaml` in this repo
 - Conformance tests: `tests/`
 
