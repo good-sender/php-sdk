@@ -34,31 +34,27 @@ export OPENAPI_GENERATOR_VERSION="${OPENAPI_GENERATOR_VERSION:-7.21.0}"
 [[ -f "$SPEC" ]] || { echo "!! spec not found at $SPEC" >&2; exit 1; }
 [[ -f "$CONFIG" ]] || { echo "!! generator config not found at $CONFIG" >&2; exit 1; }
 
-# --- .openapi-generator-ignore: protect hand-curated files from being overwritten
-cat > "$SDK_DIR/.openapi-generator-ignore" <<'IGNORE_EOF'
-LICENSE
-CHANGELOG.md
-README.md
-tests/**
-scripts/**
-openapi/**
-openapitools.json
-IGNORE_EOF
+# --- Sync .openapi-generator-ignore from .regen-ignore
+# .regen-ignore is the single source of truth for preserved paths. We filter
+# comments + blanks and write the result to .openapi-generator-ignore (which
+# openapi-generator reads). The same patterns drive --clean's preserve list.
+REGEN_IGNORE="$SDK_DIR/.regen-ignore"
+[[ -f "$REGEN_IGNORE" ]] || { echo "!! .regen-ignore not found at $REGEN_IGNORE" >&2; exit 1; }
+grep -v '^[[:space:]]*#' "$REGEN_IGNORE" | grep -v '^[[:space:]]*$' > "$SDK_DIR/.openapi-generator-ignore"
 
-# --- Optional clean step: wipe SDK output (preserves hand-curated files only)
+# --- Optional clean step: wipe SDK output (preserves entries in .regen-ignore)
 if (( CLEAN == 1 )); then
-  echo ">> --clean: wiping $SDK_DIR (preserving LICENSE, CHANGELOG.md, README.md, tests/, scripts/, openapi/, openapitools.json)"
-  find "$SDK_DIR" -mindepth 1 -maxdepth 1 \
-    ! -name LICENSE \
-    ! -name CHANGELOG.md \
-    ! -name README.md \
-    ! -name tests \
-    ! -name scripts \
-    ! -name openapi \
-    ! -name openapitools.json \
-    ! -name .git \
-    ! -name .gitignore \
-    -exec rm -rf {} +
+  preserve_args=()
+  while IFS= read -r line; do
+    line="${line%%#*}"
+    line="$(echo "$line" | xargs)"
+    [[ -z "$line" ]] && continue
+    top="${line%%/*}"
+    preserve_args+=(! -name "$top")
+  done < "$REGEN_IGNORE"
+  preserve_args+=(! -name .git ! -name .gitignore)
+  echo ">> --clean: wiping $SDK_DIR (preserving entries from .regen-ignore)"
+  find "$SDK_DIR" -mindepth 1 -maxdepth 1 "${preserve_args[@]}" -exec rm -rf {} +
 fi
 
 # --- Regen via openapi-generator-cli
