@@ -44,6 +44,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
 
       # --- Toolchain (regen driver): Node runs the openapi-generator-cli wrapper
       - uses: actions/setup-node@v4
