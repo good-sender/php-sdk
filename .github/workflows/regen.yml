@@ -158,3 +158,11 @@ jobs:
           branch: auto/regen-${{ github.run_id }}
           delete-branch: true
           labels: automated, regen
+
+      - name: Fail workflow if conformance tests failed
+        if: always() && steps.tests.outcome == 'failure'
+        run: |
+          echo "Conformance tests failed — see the 'Run conformance tests (mock)' step above."
+          echo "The regen PR (if any diff existed) has still been opened so the change is visible for review."
+          echo "This workflow run is marked failed so the failure surfaces on the PR's checks list."
+          exit 1
