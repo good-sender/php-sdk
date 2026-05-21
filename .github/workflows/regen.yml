@@ -98,13 +98,26 @@ jobs:
             echo "gen_ver<<EOF"; printf '%s\n' "$gen_ver"; echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
+      - name: Mint download token from GitHub App
+        if: steps.in.outputs.spec_url != ''
+        id: download_token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.SDK_DISPATCH_APP_ID }}
+          private-key: ${{ secrets.SDK_DISPATCH_APP_PRIVATE_KEY }}
+          owner: inboxbit
+          repositories: goodsender-web
+
       - name: Update spec from URL
         if: steps.in.outputs.spec_url != ''
         env:
           SPEC_URL: ${{ steps.in.outputs.spec_url }}
+          DOWNLOAD_TOKEN: ${{ steps.download_token.outputs.token }}
         run: |
           set -euo pipefail
-          curl --fail --location --show-error --silent "$SPEC_URL" -o openapi/goodsender.yaml
+          curl --fail --location --show-error --silent \
+            -H "Authorization: Bearer $DOWNLOAD_TOKEN" \
+            "$SPEC_URL" -o openapi/goodsender.yaml
 
       - name: Regenerate
         env:
