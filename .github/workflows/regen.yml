@@ -77,17 +77,20 @@ jobs:
       - name: Resolve inputs
         id: in
         env:
-          DISPATCH_SPEC_URL: ${{ github.event.inputs.spec_url }}
+          # Note: spec_url is intentionally NOT in this env block. It comes from a
+          # private repo's release URL and should not appear in step env-logging.
+          # Instead we jq it out of $GITHUB_EVENT_PATH and immediately add-mask it.
           DISPATCH_CLEAN: ${{ github.event.inputs.clean }}
           DISPATCH_GEN_VER: ${{ github.event.inputs.generator_version }}
-          PAYLOAD_SPEC_URL: ${{ github.event.client_payload.spec_url }}
-          PAYLOAD_SPEC_TAG: ${{ github.event.client_payload.spec_tag }}
           PAYLOAD_CLEAN: ${{ github.event.client_payload.clean }}
           PAYLOAD_GEN_VER: ${{ github.event.client_payload.generator_version }}
         run: |
           set -euo pipefail
-          spec_url="${DISPATCH_SPEC_URL:-${PAYLOAD_SPEC_URL:-}}"
-          spec_tag="${PAYLOAD_SPEC_TAG:-}"
+          spec_url=$(jq -r '.inputs.spec_url // .client_payload.spec_url // ""' "$GITHUB_EVENT_PATH")
+          spec_tag=$(jq -r '.client_payload.spec_tag // ""' "$GITHUB_EVENT_PATH")
+          if [[ -n "$spec_url" ]]; then
+            echo "::add-mask::$spec_url"
+          fi
           clean="${DISPATCH_CLEAN:-${PAYLOAD_CLEAN:-false}}"
           gen_ver="${DISPATCH_GEN_VER:-${PAYLOAD_GEN_VER:-}}"
           [[ "$clean" != "true" ]] && clean="false"
@@ -166,7 +169,6 @@ jobs:
 
             - Trigger: `${{ github.event_name }}`
             - Spec tag: `${{ steps.in.outputs.spec_tag || '(none — in-repo spec used)' }}`
-            - Spec URL: `${{ steps.in.outputs.spec_url || '(none)' }}`
             - Clean: `${{ steps.in.outputs.clean }}`
             - Generator version: `${{ steps.in.outputs.gen_ver || '(default from scripts/regen.sh)' }}`
             - Conformance tests (`tests/run.sh mock`): **${{ steps.tests.outcome }}**
