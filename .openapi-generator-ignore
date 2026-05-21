@@ -5,3 +5,5 @@ tests/**
 scripts/**
 openapi/**
 openapitools.json
+.github/**
+.regen-ignore
