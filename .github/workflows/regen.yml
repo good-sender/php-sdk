@@ -101,6 +101,29 @@ jobs:
             echo "gen_ver<<EOF"; printf '%s\n' "$gen_ver"; echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
+      - name: Resolve spec source repo from SDK_SPEC_REPO secret
+        if: steps.in.outputs.spec_url != ''
+        id: spec_repo
+        env:
+          SDK_SPEC_REPO: ${{ secrets.SDK_SPEC_REPO }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$SDK_SPEC_REPO" ]]; then
+            echo "!! SDK_SPEC_REPO secret is not set (expected: owner/repo)" >&2
+            exit 1
+          fi
+          if [[ "$SDK_SPEC_REPO" != */* ]]; then
+            echo "!! SDK_SPEC_REPO must be in 'owner/repo' format" >&2
+            exit 1
+          fi
+          owner="${SDK_SPEC_REPO%%/*}"
+          repo="${SDK_SPEC_REPO##*/}"
+          # Mask both halves so neither appears in any later log
+          echo "::add-mask::$owner"
+          echo "::add-mask::$repo"
+          echo "owner=$owner" >> "$GITHUB_OUTPUT"
+          echo "repo=$repo" >> "$GITHUB_OUTPUT"
+
       - name: Mint download token from GitHub App
         if: steps.in.outputs.spec_url != ''
         id: download_token
@@ -108,18 +131,19 @@ jobs:
         with:
           app-id: ${{ secrets.SDK_DISPATCH_APP_ID }}
           private-key: ${{ secrets.SDK_DISPATCH_APP_PRIVATE_KEY }}
-          owner: inboxbit
-          repositories: goodsender-web
+          owner: ${{ steps.spec_repo.outputs.owner }}
+          repositories: ${{ steps.spec_repo.outputs.repo }}
 
       - name: Download spec from release
         if: steps.in.outputs.spec_url != ''
         env:
           SPEC_TAG: ${{ steps.in.outputs.spec_tag }}
+          SPEC_REPO: ${{ secrets.SDK_SPEC_REPO }}
           GH_TOKEN: ${{ steps.download_token.outputs.token }}
         run: |
           set -euo pipefail
           gh release download "$SPEC_TAG" \
-            --repo inboxbit/goodsender-web \
+            --repo "$SPEC_REPO" \
             --pattern goodsender.yaml \
             --output openapi/goodsender.yaml
 
