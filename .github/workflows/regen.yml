@@ -111,16 +111,17 @@ jobs:
           owner: inboxbit
           repositories: goodsender-web
 
-      - name: Update spec from URL
+      - name: Download spec from release
         if: steps.in.outputs.spec_url != ''
         env:
-          SPEC_URL: ${{ steps.in.outputs.spec_url }}
-          DOWNLOAD_TOKEN: ${{ steps.download_token.outputs.token }}
+          SPEC_TAG: ${{ steps.in.outputs.spec_tag }}
+          GH_TOKEN: ${{ steps.download_token.outputs.token }}
         run: |
           set -euo pipefail
-          curl --fail --location --show-error --silent \
-            -H "Authorization: Bearer $DOWNLOAD_TOKEN" \
-            "$SPEC_URL" -o openapi/goodsender.yaml
+          gh release download "$SPEC_TAG" \
+            --repo inboxbit/goodsender-web \
+            --pattern goodsender.yaml \
+            --output openapi/goodsender.yaml
 
       - name: Regenerate
         env:
